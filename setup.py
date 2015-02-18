@@ -6,6 +6,7 @@ from distutils.command.install import INSTALL_SCHEMES
 # from distutils.core import setup
 from setuptools import setup
 
+
 def fullsplit(path, result=None):
     """
     Split a pathname into components (the opposite of os.path.join) in a
@@ -40,7 +41,8 @@ else:
 for dirpath, dirnames, filenames in os.walk(tagging_dir):
     # Ignore dirnames that start with '.'
     for i, dirname in enumerate(dirnames):
-        if dirname.startswith('.'): del dirnames[i]
+        if dirname.startswith('.'):
+            del dirnames[i]
     if '__init__.py' in filenames:
         packages.append('.'.join(fullsplit(dirpath)[len_root_dir:]))
     elif filenames:
@@ -54,17 +56,17 @@ else:
     version = "%d.%d" % version_tuple[:2]
 
 setup(
-    name = 'python-payflowpro',
-    version = version,
-    description = 'PayPal PayFlowPro API client library',
-    author = 'Ben Keating',
-    author_email = 'ben@deepdream.com',
-    url = 'http://github.com/bkeating/python-payflowpro/',
-    packages = packages,
-    data_files = data_files,
-    classifiers = ['Development Status :: 4 - Beta',
-                   'Intended Audience :: Developers',
-                   'License :: OSI Approved :: Apache Software License',
-                   'Operating System :: OS Independent',
-                   'Programming Language :: Python',
-                   'Topic :: Software Development :: Libraries :: Python Modules'])
+    name='python-payflowpro',
+    version=version,
+    description='PayPal PayFlowPro API client library',
+    author='Ben Keating',
+    author_email='ben@deepdream.com',
+    url='http://github.com/bkeating/python-payflowpro/',
+    packages=packages,
+    data_files=data_files,
+    classifiers=['Development Status :: 4 - Beta',
+                 'Intended Audience :: Developers',
+                 'License :: OSI Approved :: Apache Software License',
+                 'Operating System :: OS Independent',
+                 'Programming Language :: Python',
+                 'Topic :: Software Development :: Libraries :: Python Modules'])

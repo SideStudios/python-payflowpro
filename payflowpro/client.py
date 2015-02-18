@@ -17,43 +17,42 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
 import sys
 import time
 import re
 import types
 import logging
 
-from urllib2 import Request
-from urllib2 import urlopen
-from urllib2 import urlparse
+from urllib.request import Request
+from urllib.request import urlopen
+from urllib.parse import urlparse, urlsplit
 
-from classes import Address
-from classes import Amount
-from classes import CreditCard
-from classes import parse_parameters
-from classes import Profile
-from classes import Response
-from classes import Tracking
+from .classes import Address
+from .classes import Amount
+from .classes import CreditCard
+from .classes import parse_parameters
+from .classes import Profile
+from .classes import Response
+from .classes import Tracking
 
 """
 TENDER_TYPES:
-    'A', # Automated clearinghouse 
-    'C', # Credit card 
-    'D', # Pinless debit 
-    'K', # Telecheck 
+    'A', # Automated clearinghouse
+    'C', # Credit card
+    'D', # Pinless debit
+    'K', # Telecheck
     'P', # PayPal
 
 
 TRANSACTION_TYPES:
-    'S', # Sale transaction 
-    'C', # Credit 
-    'A', # Authorization 
-    'D', # Delayed Capture 
-    'V', # Void 
-    'F', # Voice Authorization 
-    'I', # Inquiry 
-    'N', # Duplicate transaction 
+    'S', # Sale transaction
+    'C', # Credit
+    'A', # Authorization
+    'D', # Delayed Capture
+    'V', # Void
+    'F', # Voice Authorization
+    'I', # Inquiry
+    'N', # Duplicate transaction
     'R', # Recurring
 """
 
@@ -61,12 +60,12 @@ TRANSACTION_TYPES:
 class CurrentTimeIdGenerator(object):
     def id(self):
         """Returns the current time in milliseconds as an integer."""
-        return int(time.time() * 1000) # Current time in milliseconds
+        return int(time.time() * 1000)  # Current time in milliseconds
 
 
 class PayflowProClient(object):
     """Payflow Pro Client Object
-    
+
     For API version 4 (also known as the HTTPS API interface)
     """
 
@@ -78,11 +77,11 @@ class PayflowProClient(object):
     HOSTPORT = 443
     API_VERSION = '4'
     CLIENT_IDENTIFIER = 'python-payflowpro'
-    MAX_RETRY_COUNT = 5 # How many times to retry failed logins or rate limited operations
-    
+    MAX_RETRY_COUNT = 5  # How many times to retry failed logins or rate limited operations
+
     def __init__(self, partner, vendor, username, password, timeout_secs=45,
-        idgenerator=CurrentTimeIdGenerator(), url_base=URL_BASE_TEST):
-        
+                 idgenerator=CurrentTimeIdGenerator(), url_base=URL_BASE_TEST):
+
         self.partner = partner
         self.vendor = vendor
         self.username = username
@@ -96,50 +95,50 @@ class PayflowProClient(object):
             self.redirect = self.REDIRECT_TEST
         else:
             self.redirect = self.REDIRECT_LIVE
-        
+
     def _build_parmlist(self, parameters):
         """
-        Converts a dictionary of name and value pairs into a 
+        Converts a dictionary of name and value pairs into a
         PARMLIST string value acceptable to the Payflow Pro API.
 
         """
 
         args = []
-        for key, value in parameters.items():
-            if not value is None:
+        for key, value in list(parameters.items()):
+            if value is not None:
                 # We always use the explicit-length keyname format, to reduce the chance
                 # of requests failing due to unusual characters in parameter values.
-                if isinstance(value, unicode):
+                if isinstance(value, str):
                     key = '%s[%d]' % (key.upper(), len(value.encode('utf-8')))
                 else:
                     key = '%s[%d]' % (key.upper(), len(str(value)))
                 args.append('%s=%s' % (key, value))
         args.sort()
-        parmlist = '&'.join(args)        
+        parmlist = '&'.join(args)
         return parmlist
-    
+
     def _parse_parmlist(self, parmlist):
         """
-        Parses a PARMLIST string into a dictionary of name and value 
+        Parses a PARMLIST string into a dictionary of name and value
         pairs. The parsing is complicated by the following:
-        
-         - parameter keynames may or may not include a length 
+
+         - parameter keynames may or may not include a length
            specification
          - delimiter characters (=, &) may appear inside parameter
            values, provided the parameter has an explicit length.
-        
+
         For example, the following parmlist values are possible:
-        
+
           A=B&C=D
           A[1]=B&C[1]=D
           A=B&C[1]=D
           A[3]=B&B&C[1]=D  (Here, the value of A is "B&B")
           A[1]=B&C[3]=D=7  (Here, the value of C is "D=7")
-          
+
         """
         parmlist = "&" + parmlist
         name_re = re.compile(r'\&([A-Z0-9_]+)(\[\d+\])?=')
-        
+
         results = {}
         offset = 0
         match = name_re.search(parmlist, offset)
@@ -155,11 +154,11 @@ class PayflowProClient(object):
                 else:
                     # At end of parmlist
                     val_len = len(parmlist) - match.end()
-            value = parmlist[match.end() : match.end() + val_len]
+            value = parmlist[match.end(): match.end() + val_len]
             results[name.lower()] = value
-                                    
+
             match = name_re.search(parmlist, offset)
-        return results        
+        return results
 
     def _do_request(self, request_id, parameters={}):
         """
@@ -167,210 +166,210 @@ class PayflowProClient(object):
         if request_id is None:
             # Generate a new request identifier using the class' default generator
             request_id = self.idgenerator.id()
-        
+
         req_params = dict(parameters)
         req_params.update(dict(
-            partner = self.partner,
-            vendor = self.vendor,
-            user = self.username,
-            pwd = self.password,            
+            partner=self.partner,
+            vendor=self.vendor,
+            user=self.username,
+            pwd=self.password,
         ))
-        
+
         parmlist = self._build_parmlist(req_params)
-        
+
         headers = {
-            'Host': urlparse.urlsplit(self.url_base)[1],
+            'Host': urlsplit(self.url_base)[1],
             'X-VPS-REQUEST-ID': str(request_id),
-            'X-VPS-CLIENT-TIMEOUT': str(self.timeout), # Doc says to do this
-            'X-VPS-Timeout': str(self.timeout), # Example says to do this
+            'X-VPS-CLIENT-TIMEOUT': str(self.timeout),  # Doc says to do this
+            'X-VPS-Timeout': str(self.timeout),  # Example says to do this
             'X-VPS-INTEGRATION-PRODUCT': self.CLIENT_IDENTIFIER,
             'X-VPS-INTEGRATION-VERSION': self.API_VERSION,
             'X-VPS-VIT-OS-NAME': sys.platform,
             'Connection': 'close',
-            'Content-Type': 'text/namevalue',            
+            'Content-Type': 'text/namevalue',
             }
 
-        self.log.debug(u'Request Headers: %s' % headers)
-            
+        self.log.debug('Request Headers: %s' % headers)
+
         try_count = 0
         results = None
         while (results is None and try_count < self.MAX_RETRY_COUNT):
             try:
                 try_count += 1
-                
+
                 request = Request(
-                    url = self.url_base, 
-                    data = parmlist.encode('utf-8'), 
-                    headers = headers)
-                    
+                    url=self.url_base,
+                    data=parmlist.encode('utf-8'),
+                    headers=headers)
+
                 response = urlopen(request)
-                result_parmlist = response.read()
+                result_parmlist = response.read().decode('utf-8')
                 response.close()
-                
+
                 self.log.debug(
-                    u'Result text: %s' % result_parmlist.decode('utf-8')
+                    'Result text: %s' % result_parmlist
                 )
-                
+
                 results = self._parse_parmlist(result_parmlist)
-            except Exception, e:
-                
+            except Exception as e:
+
                 if try_count < self.MAX_RETRY_COUNT:
                     self.log.warn(
-                        u'API request attempt %s of %s failed - %%s' % (
+                        'API request attempt %s of %s failed - %%s' % (
                             try_count, self.MAX_RETRY_COUNT), e
                         )
                 else:
-                    self.log.exception(u'Final API request failed - %s', e)
+                    self.log.exception('Final API request failed - %s', e)
                     raise e
-        
-        self.log.debug(u'Parsed PARMLIST: %s' % results)
-        
+
+        self.log.debug('Parsed PARMLIST: %s' % results)
+
         # Parse results dictionary into a set of PayflowProObjects
         result_objects, unconsumed_data = parse_parameters(results)
 
-        self.log.debug(u'Result parsed objects: %s' % result_objects)
-        self.log.debug(u'Unconsumed Data: %s' % unconsumed_data)
+        self.log.debug('Result parsed objects: %s' % result_objects)
+        self.log.debug('Unconsumed Data: %s' % unconsumed_data)
 
         return (result_objects, unconsumed_data)
-    
-    
-    ##### Implementations of standard transactions #####
-    
-    def sale(self, credit_card, amount, request_id=None, extras=[]):        
-        params = dict(trxtype = "S")
+
+    # Implementations of standard transactions
+
+    def sale(self, credit_card, amount, request_id=None, extras=[]):
+        params = dict(trxtype="S")
         for item in [credit_card, amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
-    def authorization(self, credit_card, amount, request_id=None, extras=[]):        
-        params = dict(trxtype = "A")
+    def authorization(self, credit_card, amount, request_id=None, extras=[]):
+        params = dict(trxtype="A")
         for item in [credit_card, amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
-    def capture(self, auth_pnref, request_id=None, extras=[]):        
-        params = dict(trxtype = "D", origid = auth_pnref)
+    def capture(self, auth_pnref, request_id=None, extras=[]):
+        params = dict(trxtype="D", origid=auth_pnref)
         for item in extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def voice_authorization(self, voice_auth_code, credit_card, amount, request_id=None, extras=[]):
-        params = dict(trxtype = "F", authcode = voice_auth_code)
+        params = dict(trxtype="F", authcode=voice_auth_code)
         for item in [credit_card, amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def credit_referenced(self, original_pnref, request_id=None, extras=[]):
-        params = dict(trxtype = "C", origid = original_pnref)
+        params = dict(trxtype="C", origid=original_pnref)
         for item in extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def credit_unreferenced(self, credit_card, amount, request_id=None, extras=[]):
-        params = dict(trxtype = "C")
+        params = dict(trxtype="C")
         for item in [credit_card, amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def void(self, original_pnref, request_id=None, extras=[]):
-        params = dict(trxtype = "V", origid = original_pnref)
+        params = dict(trxtype="V", origid=original_pnref)
         for item in extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def inquiry(self, original_pnref=None, customer_ref=None, request_id=None, extras=[]):
-        params = dict(trxtype = "I", origid = original_pnref, custref = customer_ref)
+        params = dict(trxtype="I", origid=original_pnref, custref=customer_ref)
         if original_pnref is None and customer_ref is None:
             raise TypeError("An inquiry requires one of the 'original_pnref' or 'customer_ref' arguments")
-        if not original_pnref is None and not customer_ref is None:
+        if original_pnref is not None and customer_ref is not None:
             raise TypeError("An inquiry requires only one of the 'original_pnref' or 'customer_ref' arguments, not both")
         for item in extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def reference_transaction(self, transaction_type, original_pnref, amount, request_id=None, extras=[]):
-        params = dict(trxtype = transaction_type, origid = original_pnref)
+        params = dict(trxtype=transaction_type, origid=original_pnref)
         for item in [amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
-    ##### Implementations of paypal express checkout #####
+    # Implementations of paypal express checkout
 
-    def set_checkout(self, setpaypal, amount, extras=[]):        
-        params = dict(trxtype = "S", action = "S")
+    def set_checkout(self, setpaypal, amount, extras=[]):
+        params = dict(trxtype="S", action="S")
         for item in [setpaypal, amount] + extras:
             params.update(item.data)
         return self._do_request(None, params)
 
     def get_checkout(self, getpaypal, extras=[]):
-        params = dict(trxtype = "S", action = "G")
+        params = dict(trxtype="S", action="G")
         for item in [getpaypal] + extras:
             params.update(item.data)
         return self._do_request(None, params)
 
     def do_checkout(self, dopaypal, amount, extras=[]):
-        params = dict(trxtype = "S", action = "D")
+        params = dict(trxtype="S", action="D")
         for item in [dopaypal, amount] + extras:
             params.update(item.data)
         return self._do_request(None, params)
 
-    ##### Implementations of recurring transactions #####
-    
+    # Implementations of recurring transactions
+
     def profile_add(self, profile, credit_card, amount, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'A')
+        params = dict(trxtype='R', action='A')
         for item in [profile, credit_card, amount] + extras:
             params.update(item.data)
         return self._do_request(request_id, params)
 
     def profile_add_from_transaction(self, original_pnref, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'A', origid = original_pnref)
+        params = dict(trxtype='R', action='A', origid=original_pnref)
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)        
+        return self._do_request(request_id, params)
 
     def profile_modify(self, profile_id, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'M', origprofileid = profile_id)
+        params = dict(trxtype='R', action='M', origprofileid=profile_id)
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)        
+        return self._do_request(request_id, params)
 
     def profile_reactivate(self, profile_id, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'R', origprofileid = profile_id)
+        params = dict(trxtype='R', action='R', origprofileid=profile_id)
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)        
+        return self._do_request(request_id, params)
 
     def profile_cancel(self, profile_id, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'C', origprofileid = profile_id)
+        params = dict(trxtype='R', action='C', origprofileid=profile_id)
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)        
+        return self._do_request(request_id, params)
 
     def profile_inquiry(self, profile_id, payment_history_only=False, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'I', origprofileid = profile_id)
+        params = dict(trxtype='R', action='I', origprofileid=profile_id)
         if payment_history_only:
             params['paymenthistory'] = 'Y'
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)        
-    
+        return self._do_request(request_id, params)
+
     def profile_pay(self, profile_id, payment_number, request_id=None, extras=[]):
-        params = dict(trxtype = 'R', action = 'P', 
-            origprofileid = profile_id, paymentnum = payment_number)
+        params = dict(trxtype='R', action='P',
+                      origprofileid=profile_id, paymentnum=payment_number)
         for item in extras:
             params.update(item.data)
-        return self._do_request(request_id, params)         
+        return self._do_request(request_id, params)
 
 
 def find_class_in_list(klass, lst):
     """
-    Returns the first occurrence of an instance of type `klass` in 
+    Returns the first occurrence of an instance of type `klass` in
     the given list, or None if no such instance is present.
     """
-    filtered = filter(lambda x: x.__class__ == klass, lst)
+    filtered = [x for x in lst if x.__class__ == klass]
     if filtered:
         return filtered[0]
     return None
+
 
 def find_classes_in_list(klasses, lst):
     """
@@ -378,15 +377,15 @@ def find_classes_in_list(klasses, lst):
     the requested class types, where the entry is either the first
     object instance of that type or None of no such instances are
     available.
-    
+
     Example Usage:
-    
+
     find_classes_in_list(
         [Address, Response],
         [<classes.Response...>, <classes.Amount...>, <classes.Address...>])
-        
-    Produces: (<classes.Address...>, <classes.Response...>)            
+
+    Produces: (<classes.Address...>, <classes.Response...>)
     """
     if not isinstance(klasses, list):
         klasses = [klasses]
-    return tuple(map(lambda klass: find_class_in_list(klass, lst), klasses))
+    return tuple([find_class_in_list(klass, lst) for klass in klasses])
